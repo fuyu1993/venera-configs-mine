@@ -28,7 +28,7 @@ class Baka extends ComicSource {
     minAppVersion = "1.6.0"
 
     // update url
-    url = "https://cdn.jsdelivr.net/gh/venera-app/venera-configs@main/baka.js"
+    url = "https://cdn.jsdelivr.net/gh/fuyu1993/venera-configs-mine@main/baka.js"
 
     // 基础URL
     baseUrl = "https://bakamh.ru/"
