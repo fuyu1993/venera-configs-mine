@@ -9,11 +9,10 @@
  * {
  *     page: "search",
  *     attributes: {
- *         keyword: "example",
+ *         keyword: "example", cesh
  *     },
  * }
  */
-
 class NewComicSource extends ComicSource {
     // Note: The fields which are marked as [Optional] should be removed if not used
 
