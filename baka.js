@@ -1,675 +1,437 @@
 /** @type {import('./_venera_.js')} */
 
 /**
- * @typedef {Object} PageJumpTarget
- * @Property {string} page - The page name (search, category)
- * @Property {Object} attributes - The attributes of the page
- *
- * @example
- * {
- *     page: "search",
- *     attributes: {
- *         keyword: "example",
- *     },
- * }
+ * 巴卡漫画 (bakamh.ru) 漫画源适配器
+ * 基于 WordPress + Madara 主题 (madara-child-mk-jp)
  */
 
 class Baka extends ComicSource {
-    // Note: The fields which are marked as [Optional] should be removed if not used
-
-    // name of the source
-    name = "巴卡漫画"
-
-    // unique id of the source
-    key = "baka"
-
-    version = "1.0.0"
-
-    minAppVersion = "1.6.0"
-
-    // update url
-    url = "https://cdn.jsdelivr.net/gh/fuyu1993/venera-configs-mine@main/baka.js"
+    // 漫画源基本信息
+    name = "巴卡漫画";
+    key = "baka";
+    version = "1.0.0";
+    minAppVersion = "1.6.0";
+    url = "https://cdn.jsdelivr.net/gh/fuyu1993/venera-configs-mine@main/baka.js";
 
     // 基础URL
-    baseUrl = "https://bakamh.ru/"
-    /**
-     * [Optional] init function
-     */
-    init() {
+    baseUrl = "https://bakamh.ru";
 
+    init() {
+        /**
+         * 获取并解析HTML页面
+         * @param {string} url
+         * @param {Object} options
+         * @returns {Promise<HtmlDocument>}
+         */
+        this.fetchHtml = async (url, options = {}) => {
+            let method = options.method || "GET";
+            let headers = options.headers || {};
+            let payload = options.payload || null;
+            let res = await Network.sendRequest(method, url, headers, payload);
+            if (res.status !== 200) {
+                throw `Invalid status code: ${res.status}, url: ${url}`;
+            }
+            return new HtmlDocument(res.body);
+        };
+
+        this.logger = {
+            error: (msg) => log("error", this.name, msg),
+            info: (msg) => log("info", this.name, msg),
+            warn: (msg) => log("warning", this.name, msg),
+        };
     }
 
-   
+    /**
+     * 通用漫画列表解析函数
+     * 从 Madara 主题的漫画列表页面解析漫画数据
+     * @param {HtmlDocument} doc
+     * @returns {{comics: Comic[], maxPage: number}}
+     */
+    _parseComicList(doc) {
+        let items = doc.querySelectorAll(".page-item-detail.manga");
+        let comics = [];
 
-    // explore page list
+        for (let item of items) {
+            try {
+                let titleEl = item.querySelector("h3.h5 a");
+                if (!titleEl) continue;
+
+                let title = titleEl.text.trim();
+                let mangaUrl = titleEl.attributes.href || "";
+                // 从URL中提取slug作为ID
+                let id = mangaUrl.split("/").filter(s => s.length > 0).pop();
+
+                let coverEl = item.querySelector(".item-thumb img");
+                let cover = "";
+                if (coverEl) {
+                    cover = coverEl.attributes.src
+                        || coverEl.attributes["data-src"]
+                        || coverEl.attributes["data-lazy-src"]
+                        || "";
+                }
+
+                // 评分
+                let scoreEl = item.querySelector(".score.font-meta.total_votes");
+                let stars = scoreEl ? parseFloat(scoreEl.text.trim()) || 0 : 0;
+
+                // 标签 - 从chapter item中无法直接获取，留空
+                let tags = [];
+
+                comics.push(new Comic({
+                    id: id,
+                    title: title,
+                    subTitle: "",
+                    cover: cover,
+                    tags: tags,
+                    stars: stars > 0 ? stars : undefined,
+                }));
+            } catch (e) {
+                this.logger.warn(`解析漫画卡片失败: ${e}`);
+            }
+        }
+
+        // 计算最大页码
+        let maxPage = 1;
+        let paginationLinks = doc.querySelectorAll(".wp-pagenavi a.page, .navigation-ajax a.page");
+        if (paginationLinks.length > 0) {
+            for (let link of paginationLinks) {
+                let pageNum = parseInt(link.text.trim());
+                if (!isNaN(pageNum) && pageNum > maxPage) {
+                    maxPage = pageNum;
+                }
+            }
+        } else {
+            // 尝试从 "下一页" 链接判断是否有更多页
+            let nextLink = doc.querySelector(".wp-pagenavi .nextpostslink, .nav-previous a");
+            // 如果当前页有漫画，假设至少有当前页+1页
+            if (comics.length > 0) {
+                maxPage = nextLink ? 100 : 1; // 保守估计
+            }
+        }
+
+        return { comics, maxPage };
+    }
+
+    // ============ 探索页(首页) ============
     explore = [
         {
-            // title of the page.
-            // title is used to identify the page, it should be unique
-            title: "",
-
-            /// multiPartPage or multiPageComicList or mixed
-            type: "multiPartPage",
-
-            /**
-             * load function
-             * @param page {number | null} - page number, null for `singlePageWithMultiPart` type
-             * @returns {{}}
-             * - for `multiPartPage` type, return [{title: string, comics: Comic[], viewMore: PageJumpTarget}]
-             * - for `multiPageComicList` type, for each page(1-based), return {comics: Comic[], maxPage: number}
-             * - for `mixed` type, use param `page` as index. for each index(0-based), return {data: [], maxPage: number?}, data is an array contains Comic[] or {title: string, comics: Comic[], viewMore: string?}
-             */
+            title: "最新更新",
+            type: "multiPageComicList",
             load: async (page) => {
-                /*
-                ```
-                let res = await Network.get("https://example.com")
-
-                if (res.status !== 200) {
-                    throw `Invalid status code: ${res.status}`
-                }
-
-                let data = JSON.parse(res.body)
-
-                function parseComic(comic) {
-                    // ...
-
-                    return new Comic({
-                        id: id,
-                        title: title,
-                        subTitle: author,
-                        cover: cover,
-                        tags: tags,
-                        description: description
-                    })
-                }
-
-                let comics = {}
-                comics["hot"] = data["results"]["recComics"].map(parseComic)
-                comics["latest"] = data["results"]["newComics"].map(parseComic)
-
-                return comics
-                ```
-                */
+                let url = page === 1
+                    ? this.baseUrl
+                    : `${this.baseUrl}/page/${page}/`;
+                let doc = await this.fetchHtml(url);
+                return this._parseComicList(doc);
             },
+        },
+    ];
 
-            /**
-             * Only use for `multiPageComicList` type.
-             * `loadNext` would be ignored if `load` function is implemented.
-             * @param next {string | null} - next page token, null if first page
-             * @returns {Promise<{comics: Comic[], next: string?}>} - next is null if no next page.
-             */
-            loadNext(next) {},
-        }
-    ]
-
-    // categories
+    // ============ 分类体系 ============
     category = {
-        /// title of the category page, used to identify the page, it should be unique
-        title: "",
+        title: "巴卡漫画",
         parts: [
             {
-                // title of the part
-                name: "Theme",
-
-                // fixed or random or dynamic
-                // if random, need to provide `randomNumber` field, which indicates the number of comics to display at the same time
-                // if dynamic, need to provide `loader` field, which indicates the function to load comics
+                name: "分类",
                 type: "fixed",
-
-                // Remove this if type is dynamic
+                itemType: "category",
                 categories: [
-                    {
-                        label: "Category1",
-                        /**
-                         * @type {PageJumpTarget}
-                         */
-                        target: {
-                            page: "category",
-                            attributes: {
-                                category: "category1",
-                                param: null,
-                            },
-                        },
-                    },
-                ]
-
-                // number of comics to display at the same time
-                // randomNumber: 5,
-
-                // load function for dynamic type
-                // loader: async () => {
-                //     return [
-                //          // ...
-                //     ]
-                // }
-            }
+                    "全部漫画",
+                    "韩漫",
+                    "BL漫画",
+                    "GL漫画",
+                    "全年龄",
+                    "英文漫画",
+                    "动画",
+                ],
+                categoryParams: [
+                    "",
+                    "manhwa",
+                    "bl",
+                    "gl",
+                    "allages",
+                    "en-manga",
+                    "anime",
+                ],
+            },
+            {
+                name: "状态",
+                type: "fixed",
+                itemType: "category",
+                categories: [
+                    "全部状态",
+                    "连载中",
+                    "已完结",
+                    "新作",
+                ],
+                categoryParams: [
+                    "",
+                    "on-going",
+                    "end",
+                    "newmanga",
+                ],
+            },
         ],
-        // enable ranking page
         enableRankingPage: false,
-    }
+    };
 
-    /// category comic loading related
+    // ============ 分类漫画加载 ============
     categoryComics = {
-        /**
-         * load comics of a category
-         * @param category {string} - category name
-         * @param param {string?} - category param
-         * @param options {string[]} - options from optionList
-         * @param page {number} - page number
-         * @returns {Promise<{comics: Comic[], maxPage: number}>}
-         */
         load: async (category, param, options, page) => {
-            /*
-            ```
-            let data = JSON.parse((await Network.get('...')).body)
-            let maxPage = data.maxPage
-
-            function parseComic(comic) {
-                // ...
-
-                return new Comic({
-                    id: id,
-                    title: title,
-                    subTitle: author,
-                    cover: cover,
-                    tags: tags,
-                    description: description
-                })
+            // param为空表示"全部"，按首页方式加载
+            let path = param || "";
+            let url;
+            if (path === "") {
+                url = page === 1
+                    ? this.baseUrl
+                    : `${this.baseUrl}/page/${page}/`;
+            } else {
+                url = page === 1
+                    ? `${this.baseUrl}/${path}/`
+                    : `${this.baseUrl}/${path}/page/${page}/`;
             }
 
-            return {
-                comics: data.list.map(parseComic),
-                maxPage: maxPage
-            }
-            ```
-            */
+            let doc = await this.fetchHtml(url);
+            return this._parseComicList(doc);
         },
-        // [Optional] provide options for category comic loading
-        optionList: [
-            {
-                // [Optional] The label will not be displayed if it is empty.
-                label: "",
-                // For a single option, use `-` to separate the value and text, left for value, right for text
-                options: [
-                    "newToOld-New to Old",
-                    "oldToNew-Old to New"
-                ],
-                // [Optional] {string[]} - show this option only when the category not in the list
-                notShowWhen: null,
-                // [Optional] {string[]} - show this option only when the category in the list
-                showWhen: null
-            }
-        ],
-        /**
-         * [Optional] load options dynamically. If `optionList` is provided, this will be ignored.
-         * @since 1.5.0
-         * @param category {string}
-         * @param param {string?}
-         * @return {Promise<{options: string[], label?: string}[]>} - return a list of option group, each group contains a list of options
-         */
-        optionLoader: async (category, param) => {
-            return [
-                {
-                    // [Optional] The label will not be displayed if it is empty.
-                    label: "",
-                    // For a single option, use `-` to separate the value and text, left for value, right for text
-                    options: [
-                        "newToOld-New to Old",
-                        "oldToNew-Old to New"
-                    ],
-                }
-            ]
-        },
-        ranking: {
-            // For a single option, use `-` to separate the value and text, left for value, right for text
-            options: [
-                "day-Day",
-                "week-Week"
-            ],
-            /**
-             * load ranking comics
-             * @param option {string} - option from optionList
-             * @param page {number} - page number
-             * @returns {Promise<{comics: Comic[], maxPage: number}>}
-             */
-            load: async (option, page) => {
-                /*
-                ```
-                let data = JSON.parse((await Network.get('...')).body)
-                let maxPage = data.maxPage
+    };
 
-                function parseComic(comic) {
-                    // ...
-
-                    return new Comic({
-                        id: id,
-                        title: title,
-                        subTitle: author,
-                        cover: cover,
-                        tags: tags,
-                        description: description
-                    })
-                }
-
-                return {
-                    comics: data.list.map(parseComic),
-                    maxPage: maxPage
-                }
-                ```
-                */
-            }
-        }
-    }
-
-    /// search related
+    // ============ 搜索功能 ============
     search = {
-        /**
-         * load search result
-         * @param keyword {string}
-         * @param options {string[]} - options from optionList
-         * @param page {number}
-         * @returns {Promise<{comics: Comic[], maxPage: number}>}
-         */
         load: async (keyword, options, page) => {
-            /*
-            ```
-            let data = JSON.parse((await Network.get('...')).body)
-            let maxPage = data.maxPage
-
-            function parseComic(comic) {
-                // ...
-
-                return new Comic({
-                    id: id,
-                    title: title,
-                    subTitle: author,
-                    cover: cover,
-                    tags: tags,
-                    description: description
-                })
+            let url;
+            // WordPress搜索URL格式
+            let encodedKeyword = encodeURIComponent(keyword);
+            if (page === 1) {
+                url = `${this.baseUrl}/?s=${encodedKeyword}&post_type=wp-manga`;
+            } else {
+                url = `${this.baseUrl}/page/${page}/?s=${encodedKeyword}&post_type=wp-manga`;
             }
 
-            return {
-                comics: data.list.map(parseComic),
-                maxPage: maxPage
+            let doc = await this.fetchHtml(url);
+
+            // 检查是否有搜索结果
+            let noResult = doc.querySelector(".search-result-count, .no-result");
+            if (noResult) {
+                let noResultText = noResult.text.trim();
+                if (noResultText.includes("没有") || noResultText.includes("0")) {
+                    return { comics: [], maxPage: 1 };
+                }
             }
-            ```
-            */
+
+            return this._parseComicList(doc);
         },
-
-        /**
-         * load search result with next page token.
-         * The field will be ignored if `load` function is implemented.
-         * @param keyword {string}
-         * @param options {(string)[]} - options from optionList
-         * @param next {string | null}
-         * @returns {Promise<{comics: Comic[], maxPage: number}>}
-         */
-        loadNext: async (keyword, options, next) => {
-
-        },
-
-        // provide options for search
-        optionList: [
-            {
-                // [Optional] default is `select`
-                // type: select, multi-select, dropdown
-                // For select, there is only one selected value
-                // For multi-select, there are multiple selected values or none. The `load` function will receive a json string which is an array of selected values
-                // For dropdown, there is one selected value at most. If no selected value, the `load` function will receive a null
-                type: "select",
-                // For a single option, use `-` to separate the value and text, left for value, right for text
-                options: [
-                    "0-time",
-                    "1-popular"
-                ],
-                // option label
-                label: "sort",
-                // default selected options. If not set, use the first option as default
-                default: null,
-            }
-        ],
-
         // enable tags suggestions
         enableTagsSuggestions: false,
-    }
+    };
 
-    // favorite related
-    favorites = {
-        // whether support multi folders
-        multiFolder: false,
-        /**
-         * add or delete favorite.
-         * throw `Login expired` to indicate login expired, App will automatically re-login and re-add/delete favorite
-         * @param comicId {string}
-         * @param folderId {string}
-         * @param isAdding {boolean} - true for add, false for delete
-         * @param favoriteId {string?} - [Comic.favoriteId]
-         * @returns {Promise<any>} - return any value to indicate success
-         */
-        addOrDelFavorite: async (comicId, folderId, isAdding, favoriteId) => {
-            /*
-            ```
-            let res = await Network.post('...')
-            if (res.status === 401) {
-                throw `Login expired`;
-            }
-            return 'ok'
-            ```
-            */
-        },
-        /**
-         * load favorite folders.
-         * throw `Login expired` to indicate login expired, App will automatically re-login retry.
-         * if comicId is not null, return favorite folders which contains the comic.
-         * @param comicId {string?}
-         * @returns {Promise<{folders: {[p: string]: string}, favorited: string[]}>} - `folders` is a map of folder id to folder name, `favorited` is a list of folder id which contains the comic
-         */
-        loadFolders: async (comicId) => {
-            /*
-            ```
-            let data = JSON.parse((await Network.get('...')).body)
-
-            let folders = {}
-
-            data.folders.forEach((f) => {
-                folders[f.id] = f.name
-            })
-
-            return {
-                folders: folders,
-                favorited: data.favorited
-            }
-            ```
-            */
-        },
-        /**
-         * add a folder
-         * @param name {string}
-         * @returns {Promise<any>} - return any value to indicate success
-         */
-        addFolder: async (name) => {
-            /*
-            ```
-            let res = await Network.post('...')
-            if (res.status === 401) {
-                throw `Login expired`;
-            }
-            return 'ok'
-            ```
-            */
-        },
-        /**
-         * delete a folder
-         * @param folderId {string}
-         * @returns {Promise<void>} - return any value to indicate success
-         */
-        deleteFolder: async (folderId) => {
-            /*
-            ```
-            let res = await Network.delete('...')
-            if (res.status === 401) {
-                throw `Login expired`;
-            }
-            return 'ok'
-            ```
-            */
-        },
-        /**
-         * load comics in a folder
-         * throw `Login expired` to indicate login expired, App will automatically re-login retry.
-         * @param page {number}
-         * @param folder {string?} - folder id, null for non-multi-folder
-         * @returns {Promise<{comics: Comic[], maxPage: number}>}
-         */
-        loadComics: async (page, folder) => {
-            /*
-            ```
-            let data = JSON.parse((await Network.get('...')).body)
-            let maxPage = data.maxPage
-
-            function parseComic(comic) {
-                // ...
-
-                return new Comic{
-                    id: id,
-                    title: title,
-                    subTitle: author,
-                    cover: cover,
-                    tags: tags,
-                    description: description
-                }
-            }
-
-            return {
-                comics: data.list.map(parseComic),
-                maxPage: maxPage
-            }
-            ```
-            */
-        },
-        /**
-         * load comics with next page token
-         * @param next {string | null} - next page token, null for first page
-         * @param folder {string}
-         * @returns {Promise<{comics: Comic[], next: string?}>}
-         */
-        loadNext: async (next, folder) => {
-
-        },
-        /**
-         * If the comic source only allows one comic in one folder, set this to true.
-         */
-        singleFolderForSingleComic: false,
-    }
-
-    /// single comic related
+    // ============ 漫画详情 ============
     comic = {
         /**
-         * load comic info
-         * @param id {string}
+         * 加载漫画详细信息
+         * @param {string} id - 漫画slug
          * @returns {Promise<ComicDetails>}
          */
         loadInfo: async (id) => {
+            let url = `${this.baseUrl}/manga/${id}/`;
+            let doc = await this.fetchHtml(url);
 
-        },
-        /**
-         * [Optional] load thumbnails of a comic
-         *
-         * To render a part of an image as thumbnail, return `${url}@x=${start}-${end}&y=${start}-${end}`
-         * - If width is not provided, use full width
-         * - If height is not provided, use full height
-         * @param id {string}
-         * @param next {string?} - next page token, null for first page
-         * @returns {Promise<{thumbnails: string[], next: string?}>} - `next` is next page token, null for no more
-         */
-        loadThumbnails: async (id, next) => {
-            /*
-            ```
-            let data = JSON.parse((await Network.get('...')).body)
+            // 标题
+            let titleEl = doc.querySelector("#manga-title h1");
+            let title = titleEl ? titleEl.text.trim() : "";
 
-            return {
-                thumbnails: data.list,
-                next: next,
+            // 封面
+            let coverEl = doc.querySelector(".summary_image a img");
+            let cover = coverEl
+                ? (coverEl.attributes.src || coverEl.attributes["data-src"] || "")
+                : "";
+
+            // 别名
+            let altTitleEl = doc.querySelector(".post-content_item .summary-content");
+            let altTitle = "";
+            let postItems = doc.querySelectorAll(".post-content_item");
+            for (let item of postItems) {
+                let heading = item.querySelector(".summary-heading h5");
+                if (heading && heading.text.trim() === "别名") {
+                    let content = item.querySelector(".summary-content");
+                    altTitle = content ? content.text.trim() : "";
+                    break;
+                }
             }
-            ```
-            */
+
+            // 作者
+            let authors = [];
+            let authorLinks = doc.querySelectorAll(".author-content a");
+            for (let a of authorLinks) {
+                authors.push(a.text.trim());
+            }
+
+            // 状态
+            let status = "未知";
+            for (let item of postItems) {
+                let heading = item.querySelector(".summary-heading h5");
+                if (heading && heading.text.trim() === "状态") {
+                    let content = item.querySelector(".summary-content");
+                    status = content ? content.text.trim() : "未知";
+                    break;
+                }
+            }
+
+            // 分类 (manga-genre)
+            let genreLinks = doc.querySelectorAll(".genres-content a");
+            let genres = [];
+            for (let a of genreLinks) {
+                genres.push(a.text.trim());
+            }
+
+            // 标签 (manga-tag)
+            let tagLinks = doc.querySelectorAll(".tags-content a");
+            let tagNames = [];
+            for (let a of tagLinks) {
+                tagNames.push(a.text.trim());
+            }
+
+            // 标签Map
+            let tagsMap = {};
+            if (genres.length > 0) {
+                tagsMap["分类"] = genres;
+            }
+            if (tagNames.length > 0) {
+                tagsMap["标签"] = tagNames;
+            }
+            if (status) {
+                tagsMap["状态"] = [status];
+            }
+
+            // 简介
+            let descEl = doc.querySelector(".summary__content p, .post-content_item .post-content_item:last-child p");
+            let description = "";
+            // 查找简介所在的post_content_item
+            for (let item of postItems) {
+                let heading = item.querySelector(".summary-heading h5");
+                if (heading && heading.text.trim() === "简介：") {
+                    let pEls = item.querySelectorAll("p");
+                    let descParts = [];
+                    for (let p of pEls) {
+                        descParts.push(p.text.trim());
+                    }
+                    description = descParts.join("\n");
+                    break;
+                }
+            }
+            // 备用：直接查找p标签
+            if (!description) {
+                let summaryWrap = doc.querySelector(".summary__content");
+                if (summaryWrap) {
+                    let pEls = summaryWrap.querySelectorAll("p");
+                    let descParts = [];
+                    for (let p of pEls) {
+                        descParts.push(p.text.trim());
+                    }
+                    description = descParts.join("\n");
+                }
+            }
+
+            // 评分
+            let scoreEl = doc.querySelector(".post-total-rating .score.font-meta.total_votes");
+            let stars = scoreEl ? parseFloat(scoreEl.text.trim()) || 0 : 0;
+
+            // 章节列表
+            let chapterItems = doc.querySelectorAll("#tab-chapter-listing ul.main.version-chap li");
+            let chapters = new Map();
+            for (let li of chapterItems) {
+                let link = li.querySelector("a");
+                if (!link) continue;
+                let chapterUrl = link.attributes.href || "";
+                let chapterId = chapterUrl.split("/").filter(s => s.length > 0).pop();
+                let chapterTitle = link.text.trim();
+                if (chapterId && chapterTitle) {
+                    chapters.set(chapterId, chapterTitle);
+                }
+            }
+
+            // 如果页面有"显示更多"按钮，章节可能被截断；先使用已加载的章节
+
+            // 更新时间 - 从最新章节日期获取
+            let updateTime = "";
+            let dateEl = doc.querySelector(".chapter-release-date i");
+            if (dateEl) {
+                updateTime = dateEl.text.trim();
+            }
+
+            return new ComicDetails({
+                title: title,
+                subTitle: altTitle || authors.join(", "),
+                cover: cover,
+                description: description,
+                tags: tagsMap,
+                chapters: chapters,
+                updateTime: updateTime,
+                url: url,
+                stars: stars > 0 ? stars : undefined,
+            });
         },
 
         /**
-         * rate a comic
-         * @param id
-         * @param rating {number} - [0-10] app use 5 stars, 1 rating = 0.5 stars,
-         * @returns {Promise<any>} - return any value to indicate success
-         */
-        starRating: async (id, rating) => {
-
-        },
-
-        /**
-         * load images of a chapter
-         * @param comicId {string}
-         * @param epId {string?}
+         * 加载章节图片
+         * @param {string} comicId - 漫画slug
+         * @param {string} epId - 章节ID (c-xxx格式)
          * @returns {Promise<{images: string[]}>}
          */
         loadEp: async (comicId, epId) => {
-            /*
-            ```
-            return {
-                // string[]
-                images: images
+            let url = `${this.baseUrl}/manga/${comicId}/${epId}/`;
+            let doc = await this.fetchHtml(url);
+
+            let images = [];
+
+            // Madara主题: 图片在 .reading-content 中，使用 data-manga-src 懒加载
+            let imgEls = doc.querySelectorAll(".reading-content img");
+            for (let img of imgEls) {
+                // 优先使用 data-manga-src（原图），否则使用 src
+                let src = img.attributes["data-manga-src"]
+                    || img.attributes["data-src"]
+                    || img.attributes["data-lazy-src"]
+                    || img.attributes.src
+                    || "";
+
+                // 过滤掉非内容图片（如loading图标、广告等）
+                if (src && !src.includes("loading") && !src.includes("spinner") && !src.includes("avatar")) {
+                    images.push(src.trim());
+                }
             }
-            ```
-            */
+
+            return { images };
         },
-        /**
-         * [Optional] provide configs for an image loading
-         * @param url
-         * @param comicId
-         * @param epId
-         * @returns {ImageLoadingConfig | Promise<ImageLoadingConfig>}
-         */
+
         onImageLoad: (url, comicId, epId) => {
-            return {}
-        },
-        /**
-         * [Optional] provide configs for a thumbnail loading
-         * @param url {string}
-         * @returns {ImageLoadingConfig | Promise<ImageLoadingConfig>}
-         *
-         * `ImageLoadingConfig.modifyImage` and `ImageLoadingConfig.onLoadFailed` will be ignored.
-         * They are not supported for thumbnails.
-         */
-        onThumbnailLoad: (url) => {
-            return {}
-        },
-        /**
-         * [Optional] like or unlike a comic
-         * @param id {string}
-         * @param isLike {boolean} - true for like, false for unlike
-         * @returns {Promise<void>}
-         */
-        likeComic: async (id, isLike) =>  {
-
-        },
-        /**
-         * [Optional] load comments
-         *
-         * Since app version 1.0.6, rich text is supported in comments.
-         * Following html tags are supported: ['a', 'b', 'i', 'u', 's', 'br', 'span', 'img'].
-         * span tag supports style attribute, but only support font-weight, font-style, text-decoration.
-         * All images will be placed at the end of the comment.
-         * Auto link detection is enabled, but only http/https links are supported.
-         * @param comicId {string}
-         * @param subId {string?} - ComicDetails.subId
-         * @param page {number}
-         * @param replyTo {string?} - commentId to reply, not null when reply to a comment
-         * @returns {Promise<{comments: Comment[], maxPage: number?}>}
-         */
-        loadComments: async (comicId, subId, page, replyTo) => {
-            /*
-            ```
-            // ...
-
             return {
-                comments: data.results.list.map(e => {
-                    return new Comment({
-                        // string
-                        userName: e.user_name,
-                        // string
-                        avatar: e.user_avatar,
-                        // string
-                        content: e.comment,
-                        // string?
-                        time: e.create_at,
-                        // number?
-                        replyCount: e.count,
-                        // string
-                        id: e.id,
-                    })
-                }),
-                // number
-                maxPage: data.results.maxPage,
-            }
-            ```
-            */
+                url: url,
+                headers: {
+                    "Referer": `${this.baseUrl}/manga/${comicId}/${epId}/`,
+                },
+            };
         },
-        /**
-         * [Optional] send a comment, return any value to indicate success
-         * @param comicId {string}
-         * @param subId {string?} - ComicDetails.subId
-         * @param content {string}
-         * @param replyTo {string?} - commentId to reply, not null when reply to a comment
-         * @returns {Promise<any>}
-         */
-        sendComment: async (comicId, subId, content, replyTo) => {
 
-        },
-        /**
-         * [Optional] like or unlike a comment
-         * @param comicId {string}
-         * @param subId {string?} - ComicDetails.subId
-         * @param commentId {string}
-         * @param isLike {boolean} - true for like, false for unlike
-         * @returns {Promise<void>}
-         */
-        likeComment: async (comicId, subId, commentId, isLike) => {
-
-        },
-        /**
-         * [Optional] vote a comment
-         * @param id {string} - comicId
-         * @param subId {string?} - ComicDetails.subId
-         * @param commentId {string} - commentId
-         * @param isUp {boolean} - true for up, false for down
-         * @param isCancel {boolean} - true for cancel, false for vote
-         * @returns {Promise<number>} - new score
-         */
-        voteComment: async (id, subId, commentId, isUp, isCancel) => {
-
-        },
-        // {string?} - regex string, used to identify comic id from user input
-        idMatch: null,
-        /**
-         * [Optional] Handle tag click event
-         * @param namespace {string}
-         * @param tag {string}
-         * @returns {PageJumpTarget}
-         */
-        onClickTag: (namespace, tag) => {
-            /*
-            ```
-            return new PageJumpTarget({
-                page: 'search',
-                keyword: tag,
-            })
-            ```
-             */
-        },
-        /**
-         * [Optional] Handle links
-         */
+        // 用于识别用户输入的漫画URL
         link: {
-            /**
-             * set accepted domains
-             */
             domains: [
-                'example.com'
+                "bakamh.ru",
+                "bakamh.com",
+                "bakamh.app",
             ],
             /**
-             * parse url to comic id
-             * @param url {string}
+             * 从URL解析漫画ID
+             * @param {string} url - 完整URL
              * @returns {string | null}
              */
             linkToId: (url) => {
-
-            }
+                // 匹配 /manga/{slug}/ 或 /manga/{slug}/c-xxx/ 格式
+                let match = url.match(/\/manga\/([^/]+)/);
+                if (match) {
+                    return match[1];
+                }
+                return null;
+            },
         },
-        // enable tags translate
-        enableTagsTranslate: false,
-    }
-
-
-   
-  
+    };
 }
