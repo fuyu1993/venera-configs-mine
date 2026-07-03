@@ -67,41 +67,123 @@ class Bakaru extends ComicSource {
             {
                 name: "分类",
                 type: "fixed",
-                itemType: "category",
                 categories: [
-                    "全部漫画",
-                    "韩漫",
-                    "BL漫画",
-                    "GL漫画",
-                    "全年龄",
-                    "英文漫画",
-                    "动画",
-                ],
-                categoryParams: [
-                    "",
-                    "manhwa",
-                    "bl",
-                    "gl",
-                    "allages",
-                    "en-manga",
-                    "anime",
+                    {
+                        label: "全部漫画",
+                        target: {
+                            page: "category",
+                            attributes: {
+                                category: "全部漫画",
+                                param: "",
+                            },
+                        },
+                    },
+                    {
+                        label: "韩漫",
+                        target: {
+                            page: "category",
+                            attributes: {
+                                category: "韩漫",
+                                param: "manhwa",
+                            },
+                        },
+                    },
+                    {
+                        label: "BL漫画",
+                        target: {
+                            page: "category",
+                            attributes: {
+                                category: "BL漫画",
+                                param: "bl",
+                            },
+                        },
+                    },
+                    {
+                        label: "GL漫画",
+                        target: {
+                            page: "category",
+                            attributes: {
+                                category: "GL漫画",
+                                param: "gl",
+                            },
+                        },
+                    },
+                    {
+                        label: "全年龄",
+                        target: {
+                            page: "category",
+                            attributes: {
+                                category: "全年龄",
+                                param: "allages",
+                            },
+                        },
+                    },
+                    {
+                        label: "英文漫画",
+                        target: {
+                            page: "category",
+                            attributes: {
+                                category: "英文漫画",
+                                param: "en-manga",
+                            },
+                        },
+                    },
+                    {
+                        label: "动画",
+                        target: {
+                            page: "category",
+                            attributes: {
+                                category: "动画",
+                                param: "anime",
+                            },
+                        },
+                    },
                 ],
             },
             {
                 name: "状态",
                 type: "fixed",
-                itemType: "category",
                 categories: [
-                    "全部状态",
-                    "连载中",
-                    "已完结",
-                    "新作",
-                ],
-                categoryParams: [
-                    "",
-                    "on-going",
-                    "end",
-                    "newmanga",
+                    {
+                        label: "全部状态",
+                        target: {
+                            page: "category",
+                            attributes: {
+                                category: "全部状态",
+                                param: "",
+                            },
+                        },
+                    },
+                    {
+                        label: "连载中",
+                        target: {
+                            page: "category",
+                            attributes: {
+                                category: "连载中",
+                                param: "on-going",
+                            },
+                        },
+                    },
+                    {
+                        label: "已完结",
+                        target: {
+                            page: "category",
+                            attributes: {
+                                category: "已完结",
+                                param: "end",
+                            },
+                        },
+                    },
+                    {
+                        label: "新作",
+                        target: {
+                            page: "category",
+                            attributes: {
+                                category: "新作",
+                                param: "newmanga",
+                            },
+                        },
+                    },
                 ],
             },
         ],
