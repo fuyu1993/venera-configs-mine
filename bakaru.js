@@ -1,7 +1,7 @@
 class Bakaru extends ComicSource {
     name = "bakaru"
     key = "bakaru"
-    version = "1.0.1"
+    version = "1.0.2"
     minAppVersion = "2.0.0"
     url = "https://bakamh.ru/"
 
@@ -58,6 +58,100 @@ class Bakaru extends ComicSource {
             },
         },
     ]
+
+    // ==================== 分类 ====================
+
+    category = {
+        title: "巴卡漫画2",
+        parts: [
+            {
+                name: "分类",
+                type: "fixed",
+                itemType: "category",
+                categories: [
+                    "全部漫画",
+                    "韩漫",
+                    "BL漫画",
+                    "GL漫画",
+                    "全年龄",
+                    "英文漫画",
+                    "动画",
+                ],
+                categoryParams: [
+                    "",
+                    "manhwa",
+                    "bl",
+                    "gl",
+                    "allages",
+                    "en-manga",
+                    "anime",
+                ],
+            },
+            {
+                name: "状态",
+                type: "fixed",
+                itemType: "category",
+                categories: [
+                    "全部状态",
+                    "连载中",
+                    "已完结",
+                    "新作",
+                ],
+                categoryParams: [
+                    "",
+                    "on-going",
+                    "end",
+                    "newmanga",
+                ],
+            },
+        ],
+        enableRankingPage: false,
+    }
+
+    // ==================== 分类漫画加载 ====================
+
+    categoryComics = {
+        load: async (category, param, options, page) => {
+            let path = param || "";
+            let url;
+            if (path === "") {
+                url = page === 1
+                    ? "https://bakamh.ru/"
+                    : `https://bakamh.ru/page/${page}/`;
+            } else {
+                url = page === 1
+                    ? `https://bakamh.ru/${path}/`
+                    : `https://bakamh.ru/${path}/page/${page}/`;
+            }
+            let resp = await Network.get(url, {});
+            if (resp.status !== 200) {
+                return { comics: [], maxPage: 1 };
+            }
+            let doc = new HtmlDocument(resp.body);
+            let items = doc.querySelectorAll(".page-item-detail");
+            let comics = [];
+            for (let item of items) {
+                let titleEl = item.querySelector(".post-title a") || item.querySelector("h3 a");
+                let imgEl = item.querySelector("img");
+                let chapterEl = item.querySelector(".chapter a") || item.querySelector(".list-chapter a");
+                if (!titleEl) continue;
+                comics.push(new Comic({
+                    id: titleEl.getAttribute("href") || "",
+                    title: titleEl.text.trim(),
+                    subTitle: chapterEl ? chapterEl.text.trim() : "",
+                    cover: imgEl ? (imgEl.getAttribute("data-src") || imgEl.getAttribute("src") || "") : "",
+                }));
+            }
+            let maxPage = 1;
+            let pageLinks = doc.querySelectorAll(".wp-pagenavi a, .pagination a, .nav-links a");
+            for (let link of pageLinks) {
+                let num = parseInt(link.text.trim());
+                if (!isNaN(num) && num > maxPage) maxPage = num;
+            }
+            doc.dispose();
+            return { comics: comics, maxPage: maxPage };
+        },
+    }
 
     // ==================== 搜索 ====================
 

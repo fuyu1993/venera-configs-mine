@@ -175,7 +175,7 @@
         "fileName": "hot_manga.js",
         "key": "hot_manga",
         "version": "1.0.0"
-	},
+    },
     {
         "name": "Kavita",
         "fileName": "kavita.js",
@@ -195,13 +195,12 @@
         "key": "baka",
         "version": "1.0.0",
         "description": ""
-    }
-    ,
+    },
     {
         "name": "巴卡漫画2",
         "fileName": "bakaru.js",
         "key": "bakaru",
-        "version": "1.0.1",
+        "version": "1.0.2",
         "description": ""
     }
 ]
