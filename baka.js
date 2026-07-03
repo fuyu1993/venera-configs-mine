@@ -9,7 +9,7 @@ class Baka extends ComicSource {
     // 漫画源基本信息
     name = "巴卡漫画";
     key = "baka";
-    version = "1.0.1";
+    version = "1.0.2";
     minAppVersion = "1.6.0";
     url = "https://cdn.jsdelivr.net/gh/fuyu1993/venera-configs-mine@main/baka.js";
 
@@ -470,7 +470,7 @@ class Baka extends ComicSource {
             return {
                 url: url,
                 headers: {
-                    "Referer": `${this.baseUrl}/manga/${comicId}/${epId}/`,
+                    "Referer": `${this.baseUrl}/`,
                 },
             };
         },
