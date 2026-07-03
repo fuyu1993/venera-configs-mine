@@ -9,7 +9,7 @@ class Baka extends ComicSource {
     // 漫画源基本信息
     name = "巴卡漫画";
     key = "baka";
-    version = "1.0.0";
+    version = "1.0.1";
     minAppVersion = "1.6.0";
     url = "https://cdn.jsdelivr.net/gh/fuyu1993/venera-configs-mine@main/baka.js";
 
@@ -112,10 +112,73 @@ class Baka extends ComicSource {
         return { comics, maxPage };
     }
 
+    /**
+     * 解析搜索结果页面
+     * 搜索结果使用 c-tabs-item__content 结构，与分类/探索页不同
+     * @param {HtmlDocument} doc
+     * @returns {{comics: Comic[], maxPage: number}}
+     */
+    _parseSearchResults(doc) {
+        let items = doc.querySelectorAll(".c-tabs-item__content");
+        let comics = [];
+
+        for (let item of items) {
+            try {
+                let titleEl = item.querySelector(".post-title h3 a, .post-title h4 a, .post-title a");
+                if (!titleEl) continue;
+
+                let title = titleEl.text.trim();
+                let mangaUrl = titleEl.attributes.href || "";
+                let id = mangaUrl.split("/").filter(s => s.length > 0).pop();
+
+                let coverEl = item.querySelector(".tab-thumb img, .tab-thumb-custom img");
+                let cover = "";
+                if (coverEl) {
+                    cover = coverEl.attributes.src
+                        || coverEl.attributes["data-src"]
+                        || coverEl.attributes["data-lazy-src"]
+                        || "";
+                }
+
+                let scoreEl = item.querySelector(".score.font-meta.total_votes");
+                let stars = scoreEl ? parseFloat(scoreEl.text.trim()) || 0 : 0;
+
+                comics.push(new Comic({
+                    id: id,
+                    title: title,
+                    subTitle: "",
+                    cover: cover,
+                    tags: [],
+                    stars: stars > 0 ? stars : undefined,
+                }));
+            } catch (e) {
+                this.logger.warn(`解析搜索结果失败: ${e}`);
+            }
+        }
+
+        let maxPage = 1;
+        let paginationLinks = doc.querySelectorAll(".wp-pagenavi a.page, .navigation-ajax a.page");
+        if (paginationLinks.length > 0) {
+            for (let link of paginationLinks) {
+                let pageNum = parseInt(link.text.trim());
+                if (!isNaN(pageNum) && pageNum > maxPage) {
+                    maxPage = pageNum;
+                }
+            }
+        } else {
+            if (comics.length > 0) {
+                let nextLink = doc.querySelector(".wp-pagenavi .nextpostslink, .nav-previous a");
+                maxPage = nextLink ? 100 : 1;
+            }
+        }
+
+        return { comics, maxPage };
+    }
+
     // ============ 探索页(首页) ============
     explore = [
         {
-            title: "最新更新",
+            title: "巴卡漫画",
             type: "multiPageComicList",
             load: async (page) => {
                 let url = page === 1
@@ -219,7 +282,7 @@ class Baka extends ComicSource {
                 }
             }
 
-            return this._parseComicList(doc);
+            return this._parseSearchResults(doc);
         },
         // enable tags suggestions
         enableTagsSuggestions: false,
