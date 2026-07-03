@@ -16,6 +16,17 @@ class Baka extends ComicSource {
     // 基础URL
     baseUrl = "https://bakamh.ru";
 
+    account = {
+        loginWithCookies: {
+            fields: ["cf_clearance"],
+            validate: async (values) => {
+                let resp = await Network.get("https://bakamh.ru/", {});
+                return resp.status !== 403;
+            },
+        },
+        registerWebsite: "https://bakamh.ru/",
+    }
+
     init() {
         /**
          * 获取并解析HTML页面
@@ -466,14 +477,14 @@ class Baka extends ComicSource {
             return { images };
         },
 
-        onImageLoad: (url, comicId, epId) => {
-            return {
-                url: url,
-                headers: {
-                    "Referer": `${this.baseUrl}/`,
-                },
-            };
-        },
+        // onImageLoad: (url, comicId, epId) => {
+        //     return {
+        //         url: url,
+        //         headers: {
+        //             "Referer": `${this.baseUrl}/`,
+        //         },
+        //     };
+        // },
 
         // 用于识别用户输入的漫画URL
         link: {
