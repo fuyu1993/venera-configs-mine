@@ -196,4 +196,12 @@
         "version": "1.0.0",
         "description": ""
     }
+    ,
+    {
+        "name": "巴卡漫画2",
+        "fileName": "bakaru.js",
+        "key": "bakaru",
+        "version": "1.0.1",
+        "description": ""
+    }
 ]
