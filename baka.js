@@ -9,7 +9,7 @@ class Baka extends ComicSource {
     // 漫画源基本信息
     name = "巴卡漫画";
     key = "baka";
-    version = "1.0.2";
+    version = "1.0.3";
     minAppVersion = "1.6.0";
     url = "https://cdn.jsdelivr.net/gh/fuyu1993/venera-configs-mine@main/baka.js";
 
@@ -25,6 +25,36 @@ class Baka extends ComicSource {
             },
         },
         registerWebsite: "https://bakamh.ru/",
+    }
+
+    // 设置项：提供"清除缓存"按钮
+    settings = {
+        clearCache: {
+            title: "清除缓存",
+            type: "callback",
+            buttonText: "清除缓存",
+            /**
+             * 点击按钮时执行，清掉站点 Cookie（含 Cloudflare 的 cf_clearance）
+             * 以及源本地保存的数据，用于解决因登录态/缓存过期导致的访问异常。
+             * @returns {void}
+             */
+            callback: () => {
+                // 清除该站点所有 Cookie（baseUrl 为 https://bakamh.ru）
+                Network.deleteCookies(this.baseUrl);
+                // 同时清掉同源其它常用域名下的 Cookie
+                for (const domain of ["bakamh.com", "bakamh.app"]) {
+                    try {
+                        Network.deleteCookies(`https://${domain}`);
+                    } catch (e) {
+                        // 忽略单个域名清除失败
+                    }
+                }
+                // 清除源本地存储的数据（如保存的 cf_clearance 等）
+                this.deleteData("cf_clearance");
+                this.deleteData("cf_clearance_com");
+                this.deleteData("cf_clearance_app");
+            },
+        },
     }
 
     init() {
